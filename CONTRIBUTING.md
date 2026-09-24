@@ -21,7 +21,7 @@ to keep it that way: fast, safe, and obvious.
 ## Getting started
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/gitsweep.git
+git clone https://github.com/rishbCLN/gitsweep.git
 cd gitsweep
 node --test               # run the suite
 node bin/gitsweep.mjs -h  # try it

@@ -32,10 +32,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/gitsweep.git"
+    "url": "https://github.com/rishbCLN/gitsweep.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_USERNAME/gitsweep/issues"
+    "url": "https://github.com/rishbCLN/gitsweep/issues"
   },
-  "homepage": "https://github.com/YOUR_USERNAME/gitsweep#readme"
+  "homepage": "https://github.com/rishbCLN/gitsweep#readme"
 }
