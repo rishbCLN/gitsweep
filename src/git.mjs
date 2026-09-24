@@ -23,11 +23,14 @@ export const DEFAULT_PROTECTED = ['main', 'master', 'develop'];
 /**
  * Parse `git branch --merged <base>` output.
  * Handles the "* current" marker, the "+ worktree" marker, and detached HEAD.
+ * `worktrees` lists branches checked out in another worktree (the "+" marker);
+ * git refuses to delete those, so callers exclude them from the offer list.
  * @param {string} stdout
- * @returns {{ branches: string[], current: string|null }}
+ * @returns {{ branches: string[], current: string|null, worktrees: string[] }}
  */
 export function parseMergedBranches(stdout) {
   const branches = [];
+  const worktrees = [];
   let current = null;
   for (const raw of String(stdout).split(/\r?\n/)) {
     const line = raw.replace(/\s+$/, '');
@@ -42,10 +45,11 @@ export function parseMergedBranches(stdout) {
       branches.push(name);
     } else {
       // "  name" (normal) or "+ name" (checked out in another worktree).
+      if (marker === '+') worktrees.push(name);
       branches.push(name);
     }
   }
-  return { branches, current };
+  return { branches, current, worktrees };
 }
 
 /**
@@ -145,7 +149,7 @@ export function isValidBranchName(name) {
  * @param {{
  *   merged?: string[],
  *   refs?: ReturnType<typeof parseForEachRef>,
- *   base?: string, current?: string, keep?: string[],
+ *   base?: string, current?: string, keep?: string[], worktrees?: string[],
  *   staleDays?: number|null, includeGone?: boolean, now?: number
  * }} input
  * @returns {Array<{ name: string, reasons: string[], merged: boolean,
@@ -158,6 +162,7 @@ export function buildCandidates(input = {}) {
     base,
     current,
     keep = [],
+    worktrees = [],
     staleDays = null,
     includeGone = false,
     now = Date.now(),
@@ -166,12 +171,16 @@ export function buildCandidates(input = {}) {
   const mergedSet = new Set(merged);
   const staleSet = new Set(staleDays != null ? selectStale(refs, staleDays, now) : []);
   const goneSet = new Set(includeGone ? selectGone(refs) : []);
+  const worktreeSet = new Set(worktrees);
   const refByName = new Map(refs.map((r) => [r.name, r]));
 
   const names = new Set([...mergedSet, ...staleSet, ...goneSet]);
   const candidates = [];
   for (const name of names) {
     if (isProtectedBranch(name, { base, current, keep })) continue;
+    // A branch checked out in another worktree cannot be deleted (`git branch -d`
+    // refuses it), so never offer it — it would only ever surface as a failure.
+    if (worktreeSet.has(name)) continue;
     const reasons = [];
     if (mergedSet.has(name)) reasons.push('merged');
     if (staleSet.has(name)) reasons.push('stale');
@@ -260,12 +269,12 @@ export async function collectBranches(opts = {}) {
   const { base, current, keep = [], staleDays = null, includeGone = false, now = Date.now() } = opts;
 
   const mergedRes = await run('git', ['branch', '--merged', base]);
-  const { branches: merged } = parseMergedBranches(mergedRes.stdout);
+  const { branches: merged, worktrees } = parseMergedBranches(mergedRes.stdout);
 
   const refRes = await run('git', ['for-each-ref', `--format=${FOR_EACH_REF_FORMAT}`, 'refs/heads']);
   const refs = parseForEachRef(refRes.stdout);
 
-  return buildCandidates({ merged, refs, base, current, keep, staleDays, includeGone, now });
+  return buildCandidates({ merged, refs, base, current, keep, worktrees, staleDays, includeGone, now });
 }
 
 /**

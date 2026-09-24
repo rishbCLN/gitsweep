@@ -38,6 +38,14 @@ test('parseMergedBranches: handles the "+" worktree marker', () => {
   assert.equal(current, 'main');
 });
 
+test('parseMergedBranches: reports "+" worktree branches separately', () => {
+  const out = `  feature/a\n+ feature/b\n+ feature/c\n* main\n`;
+  const { branches, current, worktrees } = parseMergedBranches(out);
+  assert.deepEqual(branches, ['feature/a', 'feature/b', 'feature/c', 'main']);
+  assert.deepEqual(worktrees, ['feature/b', 'feature/c']);
+  assert.equal(current, 'main');
+});
+
 test('parseMergedBranches: detached HEAD -> current is null and the marker line is skipped', () => {
   const out = `* (HEAD detached at 1a2b3c4)\n  feature/a\n  main\n`;
   const { branches, current } = parseMergedBranches(out);
@@ -46,7 +54,7 @@ test('parseMergedBranches: detached HEAD -> current is null and the marker line 
 });
 
 test('parseMergedBranches: empty output', () => {
-  assert.deepEqual(parseMergedBranches(''), { branches: [], current: null });
+  assert.deepEqual(parseMergedBranches(''), { branches: [], current: null, worktrees: [] });
 });
 
 // -------------------------------------------------------------------------
@@ -196,6 +204,39 @@ test('buildCandidates: --keep removes a branch that would otherwise qualify', ()
   assert.deepEqual(out.map((x) => x.name), ['fix/typo']);
 });
 
+test('buildCandidates: worktree branches are never offered (git refuses to delete them)', () => {
+  // feature/login is checked out in another worktree ("+" in `git branch --merged`);
+  // even though it is merged, `git branch -d` would refuse it, so it must be excluded.
+  const merged = ['feature/login', 'fix/typo', 'main'];
+  const refs = parseForEachRef(FER);
+  const out = buildCandidates({
+    merged,
+    refs,
+    base: 'main',
+    current: 'feature/checkout',
+    worktrees: ['feature/login'],
+    now: NOW,
+  });
+  assert.deepEqual(out.map((x) => x.name), ['fix/typo']);
+});
+
+test('buildCandidates: a worktree branch surfaced by --stale/--gone is still excluded', () => {
+  const merged = ['fix/typo'];
+  const refs = parseForEachRef(FER);
+  const out = buildCandidates({
+    merged,
+    refs,
+    base: 'main',
+    current: 'feature/checkout',
+    worktrees: ['old/thing'],
+    staleDays: 30,
+    includeGone: true,
+    now: NOW,
+  });
+  // old/thing is stale + gone but held by a worktree -> must not be offered.
+  assert.deepEqual(out.map((x) => x.name), ['fix/typo']);
+});
+
 // -------------------------------------------------------------------------
 // collectBranches (orchestration with an injected `run`)
 // -------------------------------------------------------------------------
@@ -235,6 +276,18 @@ test('collectBranches: with --stale/--gone includes unmerged candidates', async 
     now: NOW,
   });
   assert.deepEqual(out.map((x) => x.name), ['old/thing', 'feature/login', 'fix/typo']);
+});
+
+test('collectBranches: excludes "+" worktree branches from the offer list', async () => {
+  // feature/login shows up as a worktree branch ("+") in `git branch --merged` output.
+  const merged = `+ feature/login\n* feature/checkout\n  fix/typo\n  main\n`;
+  const out = await collectBranches({
+    run: makeRun({ merged }),
+    base: 'main',
+    current: 'feature/checkout',
+    now: NOW,
+  });
+  assert.deepEqual(out.map((x) => x.name), ['fix/typo']);
 });
 
 // -------------------------------------------------------------------------
