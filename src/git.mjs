@@ -38,9 +38,13 @@ export function parseMergedBranches(stdout) {
     const marker = line[0];
     const name = line.slice(2).trim();
     if (!name) continue;
+    // A detached HEAD is not a branch and must never be treated as one. It can
+    // appear with the "*" marker (this worktree) OR the "+" marker (another
+    // worktree), e.g. "* (HEAD detached at abc123)" / "+ (HEAD detached at abc123)".
+    // Guarding only the "*" case would let a detached worktree HEAD leak into the
+    // branch/worktree lists as a bogus name.
+    if (name.startsWith('(')) continue;
     if (marker === '*') {
-      // Detached HEAD shows up as "* (HEAD detached at abc123)".
-      if (name.startsWith('(')) continue;
       current = name;
       branches.push(name);
     } else {

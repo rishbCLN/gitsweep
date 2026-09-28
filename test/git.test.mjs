@@ -53,6 +53,19 @@ test('parseMergedBranches: detached HEAD -> current is null and the marker line 
   assert.equal(current, null);
 });
 
+// Regression: a *linked worktree* in detached state is shown with the "+" marker,
+// e.g. "+ (HEAD detached at abc123)". The "(" detached-HEAD guard previously only
+// covered the "*" (this-worktree) case, so a detached worktree HEAD leaked in as a
+// bogus branch name "(HEAD detached at abc123)" — both into `branches` and, worse,
+// into `worktrees`. It must be skipped for every marker.
+test('parseMergedBranches: detached HEAD in a linked worktree ("+") is skipped too', () => {
+  const out = `  feature/a\n+ (HEAD detached at 9f8e7d6)\n* main\n`;
+  const { branches, current, worktrees } = parseMergedBranches(out);
+  assert.deepEqual(branches, ['feature/a', 'main']);
+  assert.deepEqual(worktrees, []);
+  assert.equal(current, 'main');
+});
+
 test('parseMergedBranches: empty output', () => {
   assert.deepEqual(parseMergedBranches(''), { branches: [], current: null, worktrees: [] });
 });
